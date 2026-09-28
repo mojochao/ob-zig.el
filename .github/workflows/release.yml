@@ -1,0 +1,45 @@
+# Publish a GitHub release when a v* tag is pushed, once the ci workflow has
+# passed at that tag.  The notes are the tag's section of CHANGELOG.md.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The tag must match the Version header at its own commit, so a tag
+      # cannot publish a different version than the package declares.  The
+      # tag is read from the environment, not a ${{ }} expression, so a tag
+      # name holding shell syntax cannot run as part of this script.
+      - name: Check the tag matches the Version header
+        run: |
+          version=$(sed -n 's/^;; Version: //p' ob-zig.el)
+          test "$GITHUB_REF_NAME" = "v$version" || {
+            echo "::error::tag $GITHUB_REF_NAME does not match Version $version"
+            exit 1
+          }
+      - name: Cut the release notes from CHANGELOG.md
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '/^## /{p = ($2 == v)} p' CHANGELOG.md \
+            | sed '1d' > notes.md
+          test -s notes.md || {
+            echo "::error::CHANGELOG.md has no '## ${GITHUB_REF_NAME#v} - <date>' section"
+            exit 1
+          }
+      - run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md

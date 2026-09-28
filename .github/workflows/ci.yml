@@ -1,0 +1,37 @@
+# Run the ERT suite against real Zig on the oldest supported Emacs and a
+# development snapshot.  release.yml calls this workflow before publishing.
+#
+# Zig is "latest" rather than a pin on purpose: the suite exists to catch the
+# next Zig release breaking the package, which a pinned compiler cannot do.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs: ["30.1", "snapshot"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: latest
+      - uses: purcell/setup-emacs@bdc64dc730ae1fcba200bfd52cb1b4cf6159cbe5 # v8.0
+        with:
+          version: ${{ matrix.emacs }}
+      - name: Report tool versions
+        run: |
+          emacs --version | head -1
+          zig version
+      - run: emacs -Q --batch -L . -l test-ob-zig.el -f ert-run-tests-batch-and-exit
