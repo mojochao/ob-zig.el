@@ -45,6 +45,8 @@
 ;;require modes required for your language
 (require 'zig-mode)
 
+(declare-function org-entry-get "org" (pom property &optional inherit literal-nil))
+
 ;; optionally define a file extension for this language
 (add-to-list 'org-babel-tangle-lang-exts '("zig" . "zig"))
 
