@@ -1,60 +1,87 @@
 #+TITLE: ob-zig.el - Org Babel bindings for the Zig programming language
 * Introduction
- ob-zig.el provides [[https://orgmode.org/worg/org-contrib/babel/intro.html][Org Babel]] support for the [[https://ziglang.org][Zig]] programming language. Org
- Babel allows you to interactively edit and execute source code for many
- different languages in the same document.
+ob-zig.el provides [[https://orgmode.org/worg/org-contrib/babel/intro.html][Org Babel]] support for the [[https://ziglang.org][Zig]] programming language. Org
+Babel allows you to interactively edit and execute source code for many
+different languages in the same document.
 
 This implementation mostly follows ob-C.el, which provides org-babel support for
 the C/C++/D languages.
 * Prerequisites
- - A recent zig compiler that is installed on the exec PATH. [[https://ziglang.org/download/][Download Zig]].
- - org-mode/org-babel - these packages come installed with most recent emacs.
+- Zig 0.16 or later on the exec PATH. [[https://ziglang.org/download/][Download Zig]].
+- Emacs 30.1 or later. Org Babel ships with Emacs.
 
-It is also nice to have zig-mode installed for working with zig source:
- - zig-mode.el [[https://github.com/ziglang/zig-mode][Download zig-mode]]
+[[https://github.com/ziglang/zig-mode][zig-mode]] or zig-ts-mode are optional. Org uses whichever is installed when you
+edit a block with =C-c '=.
 * Installation
-#+begin_src shell
-git clone https://github.com/jolby/ob-zig.el.git
-#+end_src
-
 #+begin_src emacs-lisp
-(add-to-list 'load-path "/home/path-to-where-you-checked-out-ob-zig/")
-#+end_src
-At this point, you should be able to interactively execute zig source blocks in
-org mode documents.
-* Usage
-See the file ob-zig-test.org for examples of zig code blocks. If you place your
-cursor within the code blocks you can compile and execute using the key chord:
-=C-c C-c= You can also view the expanded source code block with the key chord: =C-c
-C-v C-v=
+(use-package ob-zig
+  :vc (:url "https://github.com/mojochao/ob-zig.el"))
 
-Here is an example of a zig code block within an org-mode document:
+(org-babel-do-load-languages 'org-babel-load-languages '((zig . t)))
+#+end_src
+* Usage
+Place the cursor in a zig source block and press =C-c C-c= to run it, or =C-c C-v
+C-v= to see the expanded source.
+
+A block without a =pub fn main= is wrapped in
+=pub fn main(init: std.process.Init) !void { ... }=, so the body can use =init=,
+and in particular =init.io= to write to stdout:
 #+begin_src org
-,#+source: simple
 ,#+begin_src zig :imports '(std)
-const stdout = std.io.getStdOut().writer();
-try stdout.print("{s}", .{"hello"});
+var buf: [256]u8 = undefined;
+var out = std.Io.File.stdout().writer(init.io, &buf);
+try out.interface.print("{s}", .{"hello"});
+try out.interface.flush();
+,#+end_src
+
+,#+RESULTS:
+: hello
+#+end_src
+** Header arguments
+| =:imports '(std builtin)=   | Modules to =@import= as file-scope constants.                                     |
+| =:c-includes stdio.h=       | C headers, exposed as =c= through =@cImport=. Adds =-lc=.                        |
+| =:c-defines NAME VALUE ...= | =@cDefine= pairs inside the same =@cImport=.                                       |
+| =:main no=                  | Do not wrap the body in =main=.                                                   |
+| =:flags -OReleaseFast=      | Flags passed to =zig run= or =zig test=.                                          |
+| =:cmdline a b=              | Arguments passed to the program after =--=.                                       |
+| =:libs -lc=                 | Linker flags. Also read from a =libs= property.                                   |
+| =:testsuite yes=            | Run the block with =zig test= instead of =zig run=. The body is not wrapped.     |
+| =:var=                      | Integers, floats, strings, lists and tables. See below.                           |
+** Variables and tables
+Scalars become =const name: T = value;=, lists become fixed-size arrays, and
+tables become two-dimensional arrays. All are immutable; copy one into a local
+=var= to mutate it. A table with a header row also gets a
+=name_header= array and a =name_h(row, "column")= accessor:
+#+begin_src org
+,#+name: prices
+| item  | qty |
+|-------+-----|
+| apple |   3 |
+| pear  |   5 |
+
+,#+begin_src zig :imports '(std) :var prices=prices
+var buf: [256]u8 = undefined;
+var out = std.Io.File.stdout().writer(init.io, &buf);
+try out.interface.print("{s}", .{prices_h(1, "qty")});
+try out.interface.flush();
+,#+end_src
+
+,#+RESULTS:
+: 5
+#+end_src
+** Tests
+#+begin_src org
+,#+begin_src zig :imports '(std) :testsuite yes
+test "adds" {
+    try std.testing.expectEqual(4, 2 + 2);
+}
 ,#+end_src
 #+end_src
-If you place the cursor somewhere within the above code block, and then press
-the key chord: =C-c C-c=, emacs will execute that zig source code and insert the
-result below:
-#+RESULTS: simple
-: hello
-
-Read the documentation of Org Babel for more examples of what you can do with
-source code blocks of many different languages.
+=zig test= reports progress on stderr, so Org shows the =*Org-Babel Error Output*=
+buffer even when every test passes. The block result is still correct.
 * Testing
-ob-zig.el has a test suite that works with the [[https://www.gnu.org/software/emacs/manual/html_node/ert/index.html][ERT (Emacs Lisp Regression
-Testing)]] and org-test framework that comes with emacs. The directory containing
-org-test.el needs to be on the load path. In most cases this will be the
-"testing" directory under the root of the main org package on your system. On my
-doom-emacs setup, I needed to do this to get org-test on the load path:
-
-#+begin_src elisp
-(add-to-list 'load-path (expand-file-name "straight/repos/org/testing" doom-local-dir))
+The ERT suite runs real Zig blocks through Babel and needs nothing beyond Emacs
+and =zig=:
+#+begin_src shell
+emacs -Q --batch -L . -l test-ob-zig.el -f ert-run-tests-batch-and-exit
 #+end_src
-
-The file test-ob-zig-runner.el has some utility functions for setting up paths
-and running the ERT test suite. It should be sufficient to load that file and
-then call the interactive function: =M-x test-ob-zig-run-tests=.
