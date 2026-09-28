@@ -1,4 +1,4 @@
-;;; ob-zig.el --- Org Babel functions for Zig evaluation
+;;; ob-zig.el --- Org Babel functions for Zig evaluation  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) Joel Boehland
 
@@ -6,6 +6,7 @@
 ;; Keywords: literate programming, reproducible research
 ;; Homepage: https://orgmode.org
 ;; Version: 0.01
+;; Package-Requires: ((emacs "26.1") (zig-mode "0"))
 
 ;;; License:
 
